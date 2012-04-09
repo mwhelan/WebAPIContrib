@@ -2,10 +2,13 @@
 using System.Web.Http;
 using System.Web.Http.Controllers;
 using Autofac;
+using Castle.MicroKernel.Registration;
+using Castle.Windsor;
 using Microsoft.Practices.Unity;
 using NUnit.Framework;
 using Ninject;
 using WebApiContrib.IoC.AutoFac;
+using WebApiContrib.IoC.CastleWindsor;
 using WebApiContrib.IoC.Ninject;
 using WebApiContrib.IoC.Unity;
 using WebApiContribTests.Helpers;
@@ -70,6 +73,61 @@ namespace WebApiContribTests.IoC
 
             var config = new HttpConfiguration();
             config.ServiceResolver.SetResolver(new AutoFacResolver(container));
+            var instance = config.ServiceResolver.GetService(typeof(IHttpActionSelector));
+
+            Assert.IsNotNull(instance);
+        }
+
+        [Test]
+        public void CastleWindsorResolver_Resolves_Registered_ContactRepository_Test()
+        {
+            var container = new WindsorContainer();
+            container.Register(Component.For<IContactRepository>().Instance(new InMemoryContactRepository()));
+
+            var resolver = new WindsorResolver(container.Kernel);
+            var instance = resolver.GetService(typeof(IContactRepository));
+
+            Assert.IsNotNull(instance);
+        }
+
+        [Test]
+        public void CastleWindsorResolver_DoesNot_Resolve_NonRegistered_ContactRepository_Test()
+        {
+            var container = new WindsorContainer();
+
+            var resolver = new WindsorResolver(container.Kernel);
+            var instance = resolver.GetService(typeof(IContactRepository));
+
+            Assert.IsNull(instance);
+        }
+
+        [Test]
+        public void CastleWindsorResolver_Resolves_Registered_ContactRepository_Through_ContactsController_Test()
+        {
+            var config = new HttpConfiguration();
+            config.Routes.MapHttpRoute("default",
+                "api/{controller}/{id}", new { id = RouteParameter.Optional });
+
+            var container = new WindsorContainer();
+            container.Register(Component.For<IContactRepository>().Instance(new InMemoryContactRepository()));
+
+            config.ServiceResolver.SetResolver(new WindsorResolver(container.Kernel));
+
+            var server = new HttpServer(config);
+            var client = new HttpClient(server);
+
+            var response = client.GetAsync("http://anything/api/contacts").Result;
+
+            Assert.IsNotNull(response.Content);
+        }
+
+        [Test]
+        public void CastleWindsorResolver_In_HttpConfig_DoesNot_Resolve_PipelineType_But_Fallback_To_DefaultResolver_Test()
+        {
+            var container = new WindsorContainer();
+
+            var config = new HttpConfiguration();
+            config.ServiceResolver.SetResolver(new WindsorResolver(container.Kernel));
             var instance = config.ServiceResolver.GetService(typeof(IHttpActionSelector));
 
             Assert.IsNotNull(instance);
